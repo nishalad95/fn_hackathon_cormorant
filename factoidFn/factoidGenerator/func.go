@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"regexp"
+	"strings"
 
 	fdk "github.com/fnproject/fdk-go"
 	_ "github.com/go-sql-driver/mysql"
@@ -27,10 +27,18 @@ func main() {
 
 func myHandler(ctx context.Context, in io.Reader, out io.Writer) {
 	p := Payload{}
-	err := json.NewDecoder(in).Decode(&p)
-	if err != nil {
-		respondWithFactoid(err.Error(), out)
+
+	scanner := bufio.NewScanner(in)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "&text=") {
+			p.Message = line[6:]
+		}
 	}
+	if len(p.Message) == 0 {
+		respondWithFactoid("Your message is empty", out)
+	}
+
 	year := retrieveYear(p)
 
 	factoid := retrieveFactoid(year)
@@ -42,7 +50,7 @@ func retrieveYear(p Payload) string {
 	year := re.FindAllString(p.Message, -1)
 
 	if year == nil {
-		return "could not get year"
+		return "Hmmm... It looks like you didn't enter a year, please try again :-)"
 	}
 	return year[0]
 }
@@ -77,10 +85,11 @@ func retrieveFactoid(year string) string {
 }
 
 func respondWithFactoid(fact string, out io.Writer) {
-	msg := struct {
-		Msg string `json:"factoid"`
-	}{
-		Msg: fmt.Sprintf("%s", fact),
+
+	fdk.SetHeader(out, "Content-Type", "text/plain")
+	_, err := out.Write([]byte(fact))
+	if err != nil {
+		panic(err)
 	}
-	json.NewEncoder(out).Encode(&msg)
+
 }

@@ -1,6 +1,6 @@
 schema_version: 20180708
 name: factoidgenerator
-version: 0.0.28
+version: 0.0.31
 runtime: go
 entrypoint: ./func
 format: http-stream

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"strings"
 
 	fdk "github.com/fnproject/fdk-go"
 	_ "github.com/go-sql-driver/mysql"
@@ -27,11 +29,35 @@ func main() {
 
 func myHandler(ctx context.Context, in io.Reader, out io.Writer) {
 	p := Payload{}
-	err := json.NewDecoder(in).Decode(&p)
-	if err != nil {
-		json.NewEncoder(out).Encode(err.Error())
+
+	scanner := bufio.NewScanner(in)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "&text=") {
+			line = line[6:]
+			u, err := url.QueryUnescape(line)
+			if err != nil {
+				fdk.SetHeader(out, "Content-Type", "text/plain")
+				_, err := out.Write([]byte("Your message is not parseable"))
+				if err != nil {
+					panic(err)
+				}
+				return
+			}
+			p.Year = u[0:4]
+			p.Fact = u[5:]
+		}
 	}
-	err = insertFactoid(p.Year, p.Fact, out)
+	if len(p.Fact) == 0 {
+		fdk.SetHeader(out, "Content-Type", "text/plain")
+		_, err := out.Write([]byte("Your message is empty"))
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	err := insertFactoid(p.Year, p.Fact, out)
 	if err != nil {
 		json.NewEncoder(out).Encode(err.Error())
 	}
@@ -59,11 +85,11 @@ func insertFactoid(year string, fact string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	msg := struct {
-		Msg string `json:"message"`
-	}{
-		Msg: fmt.Sprintf("Thanks! That's an interesting fact"),
+
+	fdk.SetHeader(out, "Content-Type", "text/plain")
+	_, err = out.Write([]byte("Thanks! That's an interesting fact"))
+	if err != nil {
+		return err
 	}
-	json.NewEncoder(out).Encode(&msg)
 	return nil
 }
